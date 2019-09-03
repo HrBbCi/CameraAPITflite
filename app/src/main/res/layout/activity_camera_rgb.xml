@@ -12,6 +12,25 @@
         android:layout_height="match_parent"
         />
 
+    <ImageButton
+        android:id="@+id/ibCapture"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/recycler_view"
+        android:layout_centerInParent="true"
+        android:background="@null"
+        android:contentDescription="Hello"
+        android:src="@drawable/ic_button" />
+
+    <ImageView
+        android:id="@+id/ivResultCap"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        android:layout_above="@id/recycler_view"
+        android:layout_alignParentLeft="true"
+        android:background="@null"
+        android:src="@null" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
         android:layout_width="match_parent"

@@ -109,15 +109,20 @@ public class FaceOverlayView extends View {
             if (location != null && face.getConfidence() >= THRESHOLD) {
                 RectF rectF = new RectF();
                 rectF.set(new RectF(location.left * (float) scale, location.top * (float) scale + actionBarHeight
-                        , location.right * (float) scale, location.bottom * (float) scale + actionBarHeight));
+                        , location.right * (float) scale , location.bottom * (float) scale + actionBarHeight));
 //                rectF.set(new RectF(location.left * (float) scale , location.top * (float) scale
 //                        , location.right * (float) scale, location.bottom * (float) scale));
-//                if (isFront) {
-//                    float left = rectF.left;
-//                    float right = rectF.right;
-//                    rectF.left = (getWidth() - right);
-//                    rectF.right = (getWidth() - left);
-//                }
+                if (isFront) {
+                    float top = rectF.top;
+                    float bottom = rectF.bottom;
+                    rectF.top = (getHeight() - bottom);
+                    rectF.bottom = (getHeight() - top);
+                    float left = rectF.left;
+                    float right = rectF.right;
+                    rectF.left = (getWidth() - right);
+                    rectF.right = (getWidth() - left);
+                    rectF.set(rectF.left,rectF.top ,rectF.right, rectF.bottom);
+                }
                 canvas.drawRect(rectF, mPaint);
                 canvas.drawText("ID " + face.getId(), rectF.left, rectF.bottom + mTextPaint.getTextSize(), mTextPaint);
                 canvas.drawText("" + face.getConfidence(), rectF.left, rectF.bottom + mTextPaint.getTextSize() * 2, mTextPaint);
@@ -134,7 +139,8 @@ public class FaceOverlayView extends View {
             drawFaceBox(canvas, scale);
         }
         DecimalFormat df2 = new DecimalFormat(".##");
-        canvas.drawText("Detected_Frame/s: " + df2.format(fps) + " @ " + previewWidth + "x" + previewHeight, mTextPaint.getTextSize(), mTextPaint.getTextSize(), mTextPaint);
+//        canvas.drawText("Detected_Frame/s: " + df2.format(fps) + " @ " + previewWidth + "x" + previewHeight, mTextPaint.getTextSize(), mTextPaint.getTextSize(), mTextPaint);
+        canvas.drawText( previewWidth + "x" + previewHeight, mTextPaint.getTextSize(), mTextPaint.getTextSize(), mTextPaint);
     }
 
     public void setPreviewWidth(int previewWidth) {
@@ -147,5 +153,9 @@ public class FaceOverlayView extends View {
 
     public void setFront(boolean front) {
         isFront = front;
+    }
+
+    public boolean isFront() {
+        return isFront;
     }
 }

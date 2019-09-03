@@ -128,7 +128,7 @@ public interface Classifier {
 
         @Override
         public String toString() {
-            return "[" + confidence * 100 + "%;" + location + "]";
+            return "[" + confidence + ": ;" + location + "]";
         }
     }
 }

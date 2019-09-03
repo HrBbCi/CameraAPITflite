@@ -1,11 +1,11 @@
 package com.kien.camerav3.activity;
 
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
-import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.YuvImage;
@@ -19,7 +19,10 @@ import android.view.MenuItem;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -79,13 +82,13 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
     private Classifier.Recognition faces[];
     private Classifier.Recognition faces_previous[];
     private int Id = 0;
-
     private String BUNDLE_CAMERA_ID = "camera";
-
 
     //RecylerView face image
     private HashMap<Integer, Integer> facesCount = new HashMap<>();
     private RecyclerView recyclerView;
+    private ImageButton ibCapture;
+    private ImageView ivResultCap;
     private ImagePreviewAdapter imagePreviewAdapter;
     private ArrayList<Bitmap> facesBitmap;
 
@@ -98,12 +101,18 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
     private static final String TF_OD_API_MODEL_FILE = "detectv2.tflite";
     private static final String TF_OD_API_LABELS_FILE = "file:///android_asset/labelmap.txt";
 
+    private Camera.PictureCallback mPicture;
+    private Bitmap bitmapCap;
+
+    boolean isFront = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera_rgb);
 
         mView = (SurfaceView) findViewById(R.id.surfaceView);
+        ibCapture = findViewById(R.id.ibCapture);
+        ivResultCap = findViewById(R.id.ivResultCap);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // Now create the OverlayView:
@@ -132,6 +141,17 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
         initDataTensor();
         if (savedInstanceState != null)
             cameraId = savedInstanceState.getInt(BUNDLE_CAMERA_ID, 0);
+
+        ibCapture.setOnClickListener(view -> mCamera.takePicture(null, null, getPictureCallback()));
+
+        ivResultCap.setOnClickListener(view -> {
+            final Dialog dialog = new Dialog(view.getContext(), android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+            dialog.setContentView(R.layout.dialog_image);
+            final ImageView ivDialog = dialog.findViewById(R.id.ivDialog);
+            ivDialog.setImageBitmap(bitmapCap);
+            dialog.show();
+        });
     }
 
     private void initDataTensor() {
@@ -207,6 +227,7 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
         Camera.getCameraInfo(cameraId, cameraInfo);
         if (cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
             mFaceView.setFront(true);
+            isFront = true;
         }
 
         try {
@@ -288,9 +309,9 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
     @Override
     protected void onResume() {
         super.onResume();
-
         Log.i(TAG, "onResume");
         startPreview();
+        isFront = false;
     }
 
     /**
@@ -351,12 +372,7 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
         Log.e(TAG, "previewWidth" + previewWidth);
         Log.e(TAG, "previewHeight" + previewHeight);
         cameraParameters.setPreviewSize(previewSize.width, previewSize.height);
-        /**
-         * Calculate size to scale full frame bitmap to smaller bitmap
-         * Detect face in scaled bitmap have high performance than full bitmap.
-         * The smaller image size -> detect faster, but distance to detect face shorter,
-         * so calculate the size follow your purpose
-         */
+
         if (previewWidth / 4 > 360) {
             prevSettingWidth = 360;
             prevSettingHeight = 270;
@@ -384,6 +400,7 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
 
     private void startPreview() {
         if (mCamera != null) {
+            isFront = false;
             isThreadWorking = false;
             mCamera.startPreview();
             mCamera.setPreviewCallback(this);
@@ -459,86 +476,89 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
                     yScale = (float) previewWidth / (float) prevSettingWidth;
                     break;
             }
+            Log.d("IsFront", isFront+"");
+//            if (isFront) {
+//                bmp = ImageUtils.rotate(bmp, 270);
+//            } else {
+//                bmp = ImageUtils.rotate(bmp, 90);
+//            }
             mFaceView.setmBitmap(bmp);
             mFaceView.setScale(Math.min(xScale, yScale));
             fullResults = detector.recognizeImage(bmp);
             Log.d("FULLL", fullResults.toString());
-//            for (final Classifier.Recognition faceResult : fullResults) {
-//                RectF location = faceResult.getLocation();
-//                float confidence = faceResult.getConfidence();
-//                if (location != null && confidence >= THRESHOLD) {
-//                    faceCroped = ImageUtils.cropFace(faceResult, bmp, rotate);
-//                    if (faceCroped != null) {
-//                        handler.post(() -> imagePreviewAdapter.add(faceCroped));
-//                    }
-//                }
-//                faceResult.setLocation(location);
-//            }
-
-            for (int i = 0; i < MAX_FACE; i++) {
-                Classifier.Recognition faceResult = fullResults.get(i);
-                if (faceResult == null) {
-                    faces[i].clear();
-                } else {
-                    float eyesDis = faceResult.getEyeDist() * xScale;
-                    RectF location = faceResult.getLocation();
-                    PointF mid = new PointF();
-                    mid.x *= xScale;
-                    mid.y *= yScale;
-                    Log.d("IID",mid.x+";"+mid.y);
-//                    Rect rect = new Rect(
-//                            (int) (mid.x - eyesDis * 1.20f),
-//                            (int) (mid.y - eyesDis * 0.55f),
-//                            (int) (mid.x + eyesDis * 1.20f),
-//                            (int) (mid.y + eyesDis * 1.85f));
-
-                    float confidence = faceResult.getConfidence();
-                    int idFace = Id;
-
-                    if (location != null && confidence >= THRESHOLD ) {
-                        for (int j = 0; j < MAX_FACE; j++) {
-                            float eyesDisPre = faces_previous[j].getEyeDist();
-                            PointF midPre = new PointF();
-                            faces_previous[j].getMidPoint(mid);
-                            Log.d("ABBBBB", faces_previous[j].getMidEye()+"");
-                            RectF rectCheck = new RectF(
-                                    (midPre.x - eyesDisPre * 1.5f),
-                                    (midPre.y - eyesDisPre * 1.15f),
-                                    (midPre.x + eyesDisPre * 1.5f),
-                                    (midPre.y + eyesDisPre * 1.85f));
-                            if (rectCheck.contains(mid.x, mid.y) && (System.currentTimeMillis() - faces_previous[j].getTime()) < 1000) {
-                                idFace = faces_previous[j].getId();
-                                break;
-                            }
-                        }
-                        if (idFace == Id) Id++;
-
-                        faces[i].setFace(idFace, faceResult.getTitle(), eyesDis, confidence, mid, location, System.currentTimeMillis());
-                        faces_previous[i].set(faces[i].getId(), faces[i].getTitle(), faces[i].getEyeDist(), faces[i].getConfidence(),
-                                faces[i].getMidEye(), faces[i].getLocation(), faces[i].getTime());
-
-                        if (facesCount.get(idFace) == null) {
-                            Log.d("ABC", "ABC");
-                            facesCount.put(idFace, 0);
-                        } else {
-                            int count = facesCount.get(idFace) + 1;
-                            Log.d("ABCount", count + ";;");
-                            if (count <= 3)
-                                facesCount.put(idFace, count);
-                            // Crop Face to display in RecylerView
-                            if (count == 3) {
-                                Log.d("Count", count + "");
-                                faceCroped = ImageUtils.cropFace(faces[i], bitmap, rotate);
-                                if (faceCroped != null) {
-                                    handler.post(() -> imagePreviewAdapter.add(faceCroped));
-                                }
-                            }
-                        }
+            for (final Classifier.Recognition faceResult : fullResults) {
+                RectF location = faceResult.getLocation();
+                float confidence = faceResult.getConfidence();
+                if (location != null && confidence >= THRESHOLD) {
+                    faceCroped = ImageUtils.cropFace(faceResult, bmp, rotate);
+                    if (faceCroped != null) {
+                        handler.post(() -> imagePreviewAdapter.add(faceCroped));
                     }
                 }
+                faceResult.setLocation(location);
             }
-
-
+//            for (int i = 0; i < MAX_FACE; i++) {
+//                Classifier.Recognition faceResult = fullResults.get(i);
+//                if (faceResult == null) {
+//                    faces[i].clear();
+//                } else {
+//                    float eyesDis = faceResult.getEyeDist() * xScale;
+//                    RectF location = faceResult.getLocation();
+//                    PointF mid = new PointF();
+//                    mid.x *= xScale;
+//                    mid.y *= yScale;
+//                    Log.d("IID",mid.x+";"+mid.y);
+////                    Rect rect = new Rect(
+////                            (int) (mid.x - eyesDis * 1.20f),
+////                            (int) (mid.y - eyesDis * 0.55f),
+////                            (int) (mid.x + eyesDis * 1.20f),
+////                            (int) (mid.y + eyesDis * 1.85f));
+//
+//                    float confidence = faceResult.getConfidence();
+//                    int idFace = Id;
+//
+//                    if (location != null && confidence >= THRESHOLD ) {
+//                        for (int j = 0; j < MAX_FACE; j++) {
+//                            float eyesDisPre = faces_previous[j].getEyeDist();
+//                            PointF midPre = new PointF();
+//                            faces_previous[j].getMidPoint(mid);
+//                            Log.d("ABBBBB", faces_previous[j].getMidEye()+"");
+//                            RectF rectCheck = new RectF(
+//                                    (midPre.x - eyesDisPre * 1.5f),
+//                                    (midPre.y - eyesDisPre * 1.15f),
+//                                    (midPre.x + eyesDisPre * 1.5f),
+//                                    (midPre.y + eyesDisPre * 1.85f));
+//                            if (rectCheck.contains(mid.x, mid.y) && (System.currentTimeMillis() - faces_previous[j].getTime()) < 1000) {
+//                                idFace = faces_previous[j].getId();
+//                                break;
+//                            }
+//                        }
+//                        if (idFace == Id) Id++;
+//
+//                        faces[i].setFace(idFace, faceResult.getTitle(), eyesDis, confidence, mid, location, System.currentTimeMillis());
+//                        faces_previous[i].set(faces[i].getId(), faces[i].getTitle(), faces[i].getEyeDist(), faces[i].getConfidence(),
+//                                faces[i].getMidEye(), faces[i].getLocation(), faces[i].getTime());
+//
+//                        if (facesCount.get(idFace) == null) {
+//                            Log.d("ABC", "ABC");
+//                            facesCount.put(idFace, 0);
+//                        } else {
+//                            int count = facesCount.get(idFace) + 1;
+//                            Log.d("ABCount", count + ";;");
+//                            if (count <= 3)
+//                                facesCount.put(idFace, count);
+//                            // Crop Face to display in RecylerView
+//                            if (count == 3) {
+//                                Log.d("Count", count + "");
+//                                faceCroped = ImageUtils.cropFace(faces[i], bitmap, rotate);
+//                                if (faceCroped != null) {
+//                                    handler.post(() -> imagePreviewAdapter.add(faceCroped));
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
+//            }
             handler.post(() -> {
                 //send face to FaceView to draw rect
                 mFaceView.setFaces(fullResults);
@@ -551,7 +571,6 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
                 mFaceView.setFPS(fps);
                 if (counter == (Integer.MAX_VALUE - 1000))
                     counter = 0;
-
                 isThreadWorking = false;
             });
         }
@@ -570,6 +589,35 @@ public class CameraRGBActivity extends AppCompatActivity implements SurfaceHolde
             recyclerView.setAdapter(imagePreviewAdapter);
         } else {
             imagePreviewAdapter.clearAll();
+        }
+    }
+
+    private Camera.PictureCallback getPictureCallback() {
+        Camera.PictureCallback picture = new Camera.PictureCallback() {
+            @Override
+            public void onPictureTaken(byte[] data, Camera camera) {
+                bitmapCap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                bitmapCap = ImageUtils.rotate(bitmapCap, 90);
+                Bitmap reBitmap = ImageUtils.scaleImage(bitmapCap, TF_OD_API_INPUT_SIZE);
+                detectFace(reBitmap);
+                ivResultCap.setImageBitmap(reBitmap);
+                startPreview();
+            }
+        };
+        return picture;
+    }
+
+    private void detectFace(Bitmap bitmap) {
+        resetData();
+        List<Classifier.Recognition> faces = detector.recognizeImage(bitmap);
+        for (final Classifier.Recognition faceResult : faces) {
+            final RectF location = faceResult.getLocation();
+            if (location != null && faceResult.getConfidence() >= THRESHOLD) {
+                Bitmap cropedFace = ImageUtils.cropFace(faceResult, bitmap, 0);
+                if (cropedFace != null) {
+                    imagePreviewAdapter.add(cropedFace);
+                }
+            }
         }
     }
 }
